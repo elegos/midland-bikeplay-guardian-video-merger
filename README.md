@@ -30,6 +30,10 @@ It uses the DejaVu Sans Bold font, which is a copyright of Bitstream.
 
 The project also uses OpenStreetMap to download the maps for the GPS track video.
 
+## Example output
+
+![Example frame](./docs/example_frame.png)
+
 ## How to use
 
 ```bash
