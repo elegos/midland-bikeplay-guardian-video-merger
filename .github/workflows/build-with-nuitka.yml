@@ -58,28 +58,28 @@ jobs:
           path: mbg-merger
 
   build-windows:
-      runs-on: windows-latest
+    runs-on: windows-latest
 
-      steps:
-          - name: Checkout repository
-            uses: actions/checkout@v5
-          
-          - name: Set up Python
-            uses: actions/setup-python@v6
-            with:
-                python-version: '3.13'
-          
-          - name: Install pipenv
-            run: pip install --upgrade pip pipenv
-          
-          - name: Install dependencies
-            run: pipenv install --dev
-          
-          - name: Build with Nuitka
-            run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.exe convert.py
-          
-          - name: Upload artifact
-            uses: actions/upload-artifact@v4
-            with:
-                name: mbg-merger-windows
-                path: mbg-merger.exe
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+            python-version: '3.13'
+      
+      - name: Install pipenv
+        run: pip install --upgrade pip pipenv
+      
+      - name: Install dependencies
+        run: pipenv install --dev
+      
+      - name: Build with Nuitka
+        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.exe convert.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: mbg-merger-windows
+            path: mbg-merger.exe
