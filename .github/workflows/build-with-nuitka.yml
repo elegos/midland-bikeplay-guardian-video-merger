@@ -76,7 +76,7 @@ jobs:
         run: pipenv install --dev
       
       - name: Build with Nuitka
-        run: pipenv run nuitka --assume-yes-for-downloads --mingw64 --standalone --onefile --output-filename=mbg-merger.exe convert.py
+        run: pipenv run nuitka --assume-yes-for-downloads --msvc=latest --standalone --onefile --output-filename=mbg-merger.exe convert.py
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
