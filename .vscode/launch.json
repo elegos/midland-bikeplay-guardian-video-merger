@@ -5,18 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Convert 2025.09.14",
+            "name": "Convert 2025.08.26",
             "type": "debugpy",
             "request": "launch",
             "program": "convert.py",
-            "args": ["2025.09.14"],
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "GPX test",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "gpx_test.py",
+            "args": ["2025.08.26"],
             "console": "integratedTerminal"
         }
     ]
