@@ -79,7 +79,7 @@ def process_oms_video(
         window_height_px,
     )
 
-    openstreetmaps.frames_to_video(frames, out_file, fps=30)
+    openstreetmaps.frames_to_video(frames, out_file, window_width_px, window_height_px, fps=30)
 
 if __name__ == '__main__':
     args = args.parse_args()
