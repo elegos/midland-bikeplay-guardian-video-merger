@@ -1,0 +1,88 @@
+name: Build with Nuitka (Windows)
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install pipenv
+        run: pip install --upgrade pip pipenv
+      
+      - name: Install dependencies
+        run: pipenv install --dev
+      
+      - name: Build with Nuitka
+        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.bin convert.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mbg-merger-linux-x86_64
+          path: mbg-merger.bin
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install pipenv
+        run: pip install --upgrade pip pipenv
+      
+      - name: Install dependencies
+        run: pipenv install --dev
+      
+      - name: Build with Nuitka
+        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.bin convert.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mbg-merger-macos-arm64
+          path: mbg-merger.bin
+
+  build-windows:
+      runs-on: windows-latest
+
+      steps:
+          - name: Checkout repository
+            uses: actions/checkout@v4
+          
+          - name: Set up Python
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.13'
+          
+          - name: Install pipenv
+            run: pip install --upgrade pip pipenv
+          
+          - name: Install dependencies
+            run: pipenv install --dev
+          
+          - name: Build with Nuitka
+            run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.exe convert.py
+          
+          - name: Upload artifact
+            uses: actions/upload-artifact@v3
+            with:
+                name: mbg-merger-windows
+                path: mbg-merger.exe
