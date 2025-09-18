@@ -1,9 +1,6 @@
 name: Build with Nuitka
 
-on:
-  push:
-    branches: [ master ]
-  workflow_dispatch:
+on: push
 
 jobs:
   build-linux:
@@ -11,7 +8,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -38,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -55,7 +52,7 @@ jobs:
         run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.bin convert.py
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mbg-merger-macos-arm64
           path: mbg-merger.bin
@@ -65,7 +62,7 @@ jobs:
 
       steps:
           - name: Checkout repository
-            uses: actions/checkout@v4
+            uses: actions/checkout@v5
           
           - name: Set up Python
             uses: actions/setup-python@v6
@@ -82,7 +79,7 @@ jobs:
             run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.exe convert.py
           
           - name: Upload artifact
-            uses: actions/upload-artifact@v3
+            uses: actions/upload-artifact@v4
             with:
                 name: mbg-merger-windows
                 path: mbg-merger.exe
