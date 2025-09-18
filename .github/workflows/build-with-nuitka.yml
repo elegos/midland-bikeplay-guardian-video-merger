@@ -22,13 +22,13 @@ jobs:
         run: pipenv install --dev
       
       - name: Build with Nuitka
-        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.bin convert.py
+        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger convert.py
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mbg-merger-linux-x86_64
-          path: mbg-merger.bin
+          path: mbg-merger
 
   build-macos:
     runs-on: macos-latest
@@ -49,13 +49,13 @@ jobs:
         run: pipenv install --dev
       
       - name: Build with Nuitka
-        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger.bin convert.py
+        run: pipenv run nuitka --standalone --onefile --output-filename=mbg-merger convert.py
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mbg-merger-macos-arm64
-          path: mbg-merger.bin
+          path: mbg-merger
 
   build-windows:
       runs-on: windows-latest
