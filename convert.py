@@ -2,12 +2,14 @@ from argparse import ArgumentParser
 from pathlib import Path
 import json
 import logging
+import shutil
 import sys
 from typing import Any
 
 from PIL import Image
 
 from bikeplay_guardian.core import make_pip, merge_videos, split_files
+from bikeplay_guardian.ffmpeg import has_encoder, has_filter
 from bikeplay_guardian.gps import GPSData, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_points_from_gpx
 from bikeplay_guardian.openstreetmaps import DEFAULT_ZOOM_LEVEL, TILE_SIZE, gpx_to_osm_map
 from bikeplay_guardian.utils import progress_bar
@@ -18,6 +20,24 @@ args.add_argument('input_folder', type=Path, help='Path to the input folder cont
 args.add_argument('--debug', action='store_true', help='Enable debug logging')
 args.add_argument('--window-width', type=int, default=480, help='Width of the Open Street Map GPS track window')
 args.add_argument('--window-height', type=int, default=640, help='Height of the Open Street Map GPS track window')
+
+def check_requirements() -> bool:
+    logging.info('Checking requirements...')
+
+    # Check for ffmpeg in the system's path
+    ffmpeg_executable = shutil.which('ffmpeg') or shutil.which('ffmpeg.exe')
+    if ffmpeg_executable is None:
+        logging.error(f'Cannot find ffmpeg executable in the system path. Please ensure that ffmpeg is installed and available in the PATH.')
+
+        return False
+    
+    cuda_filters = all(has_filter(b) for b in ['bilateral_cuda', 'scale_npp', 'scale_cuda', 'overlay_cuda'])
+
+    if not cuda_filters or not has_encoder('hevc_nvenc'):
+        logging.warning('FFMPEG was found, but it was not compiled with the CUDA support or the CUDA-enabled npp filters. Falling back to CPU-bound filters.')
+        logging.warning('If you have a NVIDIA GPU, it is recommended to recompile ffmpeg with CUDA and libnpp support for better performance.')
+
+    return True
 
 def extract_gps_data(front_file: Path) -> list[GPSData|None]|None:
     rear_file = input_path / 'ts_rear' / front_file.name.replace('_F.ts', '_R.ts')
@@ -66,6 +86,9 @@ if __name__ == '__main__':
     input_path: Path = args.input_folder
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    if not check_requirements():
+        sys.exit(1)
 
     pip_folder = input_path / 'mp4_pip'
     pip_folder.mkdir(exist_ok=True)
