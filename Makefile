@@ -1,13 +1,13 @@
-all: prerequisites convert.bin
+all: prerequisites mbg-merger.bin
 
 prerequisites:
 	pipenv install --dev
 
-convert.bin: convert.py
-	pipenv run nuitka --standalone --onefile --output-filename=convert.bin $<
+mbg-merger: convert.py
+	pipenv run nuitka --standalone --onefile --output-filename=mbg-merger $<
 
 clean:
-	rm -f convert.bin
+	rm -f mbg-merger
 	rm -rf convert.build
 	rm -rf convert.dist
 
