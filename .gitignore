@@ -1,8 +1,16 @@
 # Test data
-*/*.jpg
-*/*.ts
-*/*.mp4
-*/*.gpx
+**/*.jpg
+**/*.ts
+**/*.mp4
+**/*.gpx
+**/*.json
+**/*.png
+!/docs/*.png
 
 # Python cache
 __pycache__
+
+# Nuitka output
+/*.bin
+/*.build
+/*.dist
