@@ -40,7 +40,7 @@ The project also uses OpenStreetMap to download the maps for the GPS track video
 # First time only
 pipenv install
 
-pipenv run python ./convert folder-where-all-files-are-stored
+pipenv run python ./convert.py folder-where-all-files-are-stored
 ```
 
 It will:
