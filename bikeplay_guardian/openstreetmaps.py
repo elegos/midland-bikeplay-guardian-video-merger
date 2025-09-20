@@ -17,6 +17,20 @@ from bikeplay_guardian.utils import progress_bar
 TILE_SIZE = 256  # OSM tile size in pixels
 DEFAULT_ZOOM_LEVEL = 15 # OSM zoom level
 
+def make_na_map_placeholder(window_width_px: int, window_height_px: int) -> Image.Image:
+    text = 'N/A'
+
+    img = Image.new('RGB', (window_width_px, window_height_px), (int(0.18 * 255), int(0.18 * 255), int(0.18 * 255)))
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(Path(__file__).parent / 'DejaVuSans-Bold.ttf', 40)
+
+    text_bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+
+    draw.text(((window_width_px - text_width) // 2, (window_height_px - text_height) // 2), text, font=font, fill=(255, 255, 255))
+    return img.copy()
+
 def gpx_to_osm_map(
         gpx: Path, osm_z_level: int, window_width_px: int, window_height_px: int
     ) -> tuple[Image.Image, tuple[int, int]]:
@@ -128,6 +142,13 @@ def gpx_to_frames(gpx_points: list[GPXTrackPoint], img: Image.Image, osm_origin:
 
     frames: list[tuple[datetime, Image.Image]] = []
     for i, (x, y) in enumerate(coords):
+        # Add a placeholder if the coordinates are out of bounds (typically 0, 0 -> tunnels or generally speaking no GPS signal)
+        if x < 0 or x > img.width or y < 0 or y > img.height:
+            placeholder = make_na_map_placeholder(window_width_px, window_height_px)
+            frames.append((gpx_points[i].time, placeholder))
+
+            continue
+
         cropped = crop_window(img, (x, y), window_width_px, window_height_px).copy()
         if i < len(coords)-1 and coords[i] != coords[i+1]:
             angle = bearing(coords[i], coords[i+1])
@@ -169,6 +190,9 @@ def gpx_to_frames(gpx_points: list[GPXTrackPoint], img: Image.Image, osm_origin:
     frames = new_frames
 
     frames.sort(key=lambda f: f[0])
+
+    if not frames:
+        frames = [(gpx_points[0].time or datetime.now() if len(gpx_points) else datetime.now(), make_na_map_placeholder(window_width_px, window_height_px))]
 
     return frames
 
