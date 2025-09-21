@@ -1,10 +1,26 @@
 from datetime import datetime
 import math
 from pathlib import Path
+from typing import Protocol
 from PIL import Image, ImageDraw, ImageFont
 import pytz
 
 from bikeplay_guardian.utils import textbox_size
+
+class GPSInfoOverlayFunction(Protocol):
+    def __call__(
+        self,
+        speed: int,
+        lat: float,
+        lon: float,
+        direction: str,
+        location: str,
+        dt: datetime,
+        timezone: str = "Europe/Rome",
+        width: int = 800,
+        height: int = 400
+    ) -> Image.Image:
+        ...
 
 def draw_tachometer_flatbase(
     speed: int,
