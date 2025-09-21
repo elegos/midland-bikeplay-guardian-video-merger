@@ -9,6 +9,7 @@ pillow = "*"
 requests = "*"
 opencv-python = "*"
 numpy = "*"
+pytz = "*"
 
 [dev-packages]
 nuitka = "*"
