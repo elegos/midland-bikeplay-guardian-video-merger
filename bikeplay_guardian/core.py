@@ -1,9 +1,17 @@
+from datetime import datetime
 import logging
 from pathlib import Path
 import subprocess
+from time import sleep
 from typing import Iterator
 
+from PIL import Image
+import gpxpy
+
 from bikeplay_guardian.ffmpeg import has_encoder, has_filter
+from bikeplay_guardian.gps import gpx_to_direction
+from bikeplay_guardian.gps_info_overlay import GPSInfoOverlayFunction
+from bikeplay_guardian.openstreetmaps import latlon_to_village_name
 
 
 def split_files(folder: Path):
@@ -26,6 +34,47 @@ def split_files(folder: Path):
     logging.info(f'{__name__} Moving snapshots...')
     for file_path in folder.glob('*.jpg'):
         file_path.rename(jpg / file_path.name)
+
+def make_bottom_right_overlay(gpx: Path, gpx_src_filter: str, overlay_fn: GPSInfoOverlayFunction, timezone: str, width_px: int, height_px: int) -> list[tuple[datetime, Image.Image]]:
+    result: list[tuple[datetime, Image.Image]] = []
+
+    gpx_data = gpxpy.parse(gpx.open('r'))
+
+    last_village_name: str|None = None
+    pt_idx = 0
+    for track in gpx_data.tracks:
+        if track.source != gpx_src_filter:
+            continue
+
+        for trkseg in track.segments:
+            for trkpt in trkseg.points:
+                if trkpt.time:
+                    pt_idx += 1
+
+                    speed = next((ext.text for ext in trkpt.extensions if ext.tag == 'speed'), '0 km/h')
+                    speed_val, speed_unit = speed.split(' ')
+                    speed_val = float(speed_val)
+
+                    # Calculate the village name only once every 10 seconds
+                    village_name = last_village_name if pt_idx % 10 != 0 and last_village_name and last_village_name != 'N/A' else latlon_to_village_name(trkpt.latitude, trkpt.longitude)
+                    if pt_idx % 10 == 0:
+                        sleep(0.1) # OpenStreetMap API thresholds
+                    last_village_name = village_name
+
+                    result.append((trkpt.time, overlay_fn(
+                        speed_val,
+                        speed_unit,
+                        trkpt.latitude,
+                        trkpt.longitude,
+                        f'{gpx_to_direction(gpx_data, trkpt.time) or 0}°',
+                        village_name,
+                        trkpt.time,
+                        timezone,
+                        width_px,
+                        height_px
+                    )))
+
+    return result
 
 def make_pip(main: Path, secondary: Path, oms_vid: Path, output: Path, main_size: tuple[int, int] = (1920, 1080), oms_vid_size: tuple[int, int] = (480, 640), oms_vid_margin_px: int = 55, oms_vid_scale: float = 0.8) -> None:
     ''' Make a picture-in-picture video from two input videos.'''

@@ -5,11 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Convert 2025.08.26",
+            "name": "Convert 2025.09.20",
             "type": "debugpy",
             "request": "launch",
             "program": "convert.py",
-            "args": ["2025.08.26"],
+            "args": ["--gps-overlay=tachometer", "2025.09.20"],
             "console": "integratedTerminal"
         }
     ]

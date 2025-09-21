@@ -8,9 +8,11 @@ from typing import Any
 
 from PIL import Image
 
-from bikeplay_guardian.core import make_pip, merge_videos, split_files
+from bikeplay_guardian.core import make_bottom_right_overlay, make_pip, merge_videos, split_files
+from bikeplay_guardian.cv2_tools import frames_to_video
 from bikeplay_guardian.ffmpeg import has_encoder, has_filter
 from bikeplay_guardian.gps import GPSData, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_points_from_gpx
+from bikeplay_guardian.gps_info_overlay import GPSInfoOverlayFunction, draw_tachometer_flatbase
 from bikeplay_guardian.openstreetmaps import DEFAULT_ZOOM_LEVEL, TILE_SIZE, gpx_to_osm_map
 from bikeplay_guardian.utils import progress_bar
 from bikeplay_guardian import openstreetmaps
@@ -20,6 +22,8 @@ args.add_argument('input_folder', type=Path, help='Path to the input folder cont
 args.add_argument('--debug', action='store_true', help='Enable debug logging')
 args.add_argument('--window-width', type=int, default=480, help='Width of the Open Street Map GPS track window')
 args.add_argument('--window-height', type=int, default=640, help='Height of the Open Street Map GPS track window')
+args.add_argument('--gps-overlay', type=str, choices=['tachometer'], default=None)
+args.add_argument('--timezone', type=str, default='Europe/Rome')
 
 def check_requirements() -> bool:
     logging.info('Checking requirements...')
@@ -79,7 +83,24 @@ def process_oms_video(
         window_height_px,
     )
 
-    openstreetmaps.frames_to_video(frames, out_file, window_width_px, window_height_px, fps=30)
+    frames_to_video(frames, out_file, window_width_px, window_height_px, fps=30)
+
+def process_overlay_video(
+    gpx_file: Path,
+    gpx_src_filter: str,
+    overlay_fn: GPSInfoOverlayFunction,
+    timezone: str,
+    width_px: int,
+    height_px: int,
+    out_file: Path
+):
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    if out_file.exists():
+        return
+
+    frames = make_bottom_right_overlay(gpx_file, gpx_src_filter, overlay_fn, timezone, width_px, height_px)
+
+    frames_to_video(frames, out_file, width_px, height_px, na_func=lambda x, y: overlay_fn(0, '', 0, 0, '0°', '', None, timezone), fps=30)
 
 if __name__ == '__main__':
     args = args.parse_args()
@@ -130,6 +151,20 @@ if __name__ == '__main__':
             input_path / 'track.gpx', pip_file.name,
             input_path / 'oms_videos' / (pip_file.name.split('.')[0] + '.mp4')
         )
+    
+    if args.gps_overlay == 'tachometer':
+        logging.info('Processing Tachometer overlay videos...')
+        for idx, pip_file in enumerate((input_path / 'ts_front').glob('*.ts')):
+            progress_bar(idx + 1, num_files)
+            process_overlay_video(
+                gpx_file=input_path / 'track.gpx',
+                gpx_src_filter=pip_file.name,
+                overlay_fn=draw_tachometer_flatbase,
+                timezone=args.timezone,
+                width_px=800,
+                height_px=400,
+                out_file=input_path / 'tachometer_videos' / (pip_file.name.split('.')[0] + '.avi')
+            )
     
     logging.info('Merging segment videos [PIP]...')
     gps_data_len = len([datum for datum in gps_data if datum is not None])

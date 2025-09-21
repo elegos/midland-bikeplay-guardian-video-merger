@@ -1,21 +1,23 @@
 from datetime import datetime, timedelta
 from io import BytesIO
-import logging
 from pathlib import Path
+from typing import Any
+
+import logging
 import math
 import time
 
 from gpxpy import parse
 from gpxpy.gpx import GPXTrackPoint
 from PIL import Image, ImageDraw, ImageFont
-import cv2
-import numpy as np
+
 import requests
 
 from bikeplay_guardian.utils import progress_bar
 
 TILE_SIZE = 256  # OSM tile size in pixels
 DEFAULT_ZOOM_LEVEL = 15 # OSM zoom level
+USER_AGENT = 'Bikeplay Guardian GPX Tool 1.0'
 
 def make_na_map_placeholder(window_width_px: int, window_height_px: int) -> Image.Image:
     text = 'N/A'
@@ -71,7 +73,7 @@ def gpx_to_osm_map(
         progress_bar(idx + 1, num_coords)
 
         url = f"https://a.tile.openstreetmap.org/{osm_z_level}/{tile_x}/{tile_y}.png"
-        response = requests.get(url, headers={"User-Agent": "Bikeplay Guardian GPX Tool 1.0"})
+        response = requests.get(url, headers={"User-Agent": USER_AGENT})
         time.sleep(0.1)  # Be nice to the server
         if response.status_code == 200:
             image = Image.open(BytesIO(response.content))
@@ -196,24 +198,33 @@ def gpx_to_frames(gpx_points: list[GPXTrackPoint], img: Image.Image, osm_origin:
 
     return frames
 
-def frames_to_video(frames: list[tuple[datetime, Image.Image]], output: Path, window_width_px: int, window_height_px: int, fps: int = 30):
-    out = cv2.VideoWriter(str(output), cv2.VideoWriter.fourcc(*'mp4v'), fps, (window_width_px, window_height_px))
+def latlon_to_village_name(lat: float, lon: float) -> str:
+    '''Use the Nominatim service to get the village's / city's name'''
 
-    # No frames available, show "N/A" on a gray background
-    if not frames:
-        text = 'N/A'
+    # Manage edge cases
+    if lat == 0 and lon == 0:
+        return 'N/A'
 
-        img = Image.new('RGB', (window_width_px, window_height_px), (int(0.18 * 255), int(0.18 * 255), int(0.18 * 255)))
-        draw = ImageDraw.Draw(img)
-        font = ImageFont.truetype(Path(__file__).parent / 'DejaVuSans-Bold.ttf', 40)
+    url = "https://nominatim.openstreetmap.org/reverse"
+    params: dict[str, Any] = {
+        "format": "jsonv2",
+        "lat": lat,
+        "lon": lon,
+        "zoom": 10,          # zoom level 10 ≈ city
+        "addressdetails": 1
+    }
 
-        text_bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
+    headers = {"User-Agent": USER_AGENT}
+    resp = requests.get(url, params=params, headers=headers)
+    data = resp.json()
 
-        draw.text(((window_width_px - text_width) // 2, (window_height_px - text_height) // 2), text, font=font, fill=(255, 255, 255))
-        frames = [(datetime.now(), img.copy())]
+    addr = data.get('address', {})
 
-    for f in frames:
-        out.write(cv2.cvtColor(np.array(f[1]), cv2.COLOR_RGB2BGR))
-    out.release()
+    return (
+        addr.get("city")
+        or addr.get("town")
+        or addr.get("village")
+        or addr.get("hamlet")
+        or addr.get("municipality")
+        or 'N/A'
+    )

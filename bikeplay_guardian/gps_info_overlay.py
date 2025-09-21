@@ -10,12 +10,13 @@ from bikeplay_guardian.utils import textbox_size
 class GPSInfoOverlayFunction(Protocol):
     def __call__(
         self,
-        speed: int,
+        speed: float,
+        speed_unit: str,
         lat: float,
         lon: float,
         direction: str,
         location: str,
-        dt: datetime,
+        dt: datetime|None,
         timezone: str = "Europe/Rome",
         width: int = 800,
         height: int = 400
@@ -23,12 +24,13 @@ class GPSInfoOverlayFunction(Protocol):
         ...
 
 def draw_tachometer_flatbase(
-    speed: int,
+    speed: float,
+    speed_unit: str,
     lat: float,
     lon: float,
     direction: str,
     location: str,
-    dt: datetime,
+    dt: datetime|None,
     timezone: str = "Europe/Rome",
     width: int = 800,
     height: int = 400
@@ -97,7 +99,7 @@ def draw_tachometer_flatbase(
             draw.text((tx - w/2, ty - h/2), t, fill="white", font=font_small)
 
     # ---------- Centered speed text ----------
-    text_speed = f"{speed} km/h"
+    text_speed = f"{speed:.1f} {speed_unit}"
     w, h = textbox_size(draw, text_speed, font_big)
     # At the center of the gray disk
     center_text_y = center_y - radius * 0.4
@@ -119,18 +121,19 @@ def draw_tachometer_flatbase(
         y_offset += h_line + 4
     
     # ---------- Date and time at the bottom right ----------
-    # Format the datetime depending on the tz variable
-    tz = pytz.timezone(timezone)
-    if dt.tzinfo is None:
-        dt_with_tz = tz.localize(dt)
-    else:
-        dt_with_tz = dt.astimezone(tz)
-    dt_text = dt_with_tz.strftime("%d/%m/%Y %H:%M %Z%z")
+    if dt is not None:
+        # Format the datetime depending on the tz variable
+        tz = pytz.timezone(timezone)
+        if dt.tzinfo is None:
+            dt_with_tz = tz.localize(dt)
+        else:
+            dt_with_tz = dt.astimezone(tz)
+        dt_text = dt_with_tz.strftime("%d/%m/%Y %H:%M %Z%z")
 
-    w, h = textbox_size(draw, dt_text, font_small)
-    draw.text(
-        (center_x - w/2, height - h - 10),
-        dt_text, fill="white", font=font_small
-    )
+        w, h = textbox_size(draw, dt_text, font_small)
+        draw.text(
+            (center_x - w/2, height - h - 10),
+            dt_text, fill="white", font=font_small
+        )
 
     return img

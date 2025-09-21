@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
+import math
 from pathlib import Path
 import subprocess
 import xml.etree.cElementTree as ET
 
 import gpxpy
-from gpxpy.gpx import GPXTrackPoint
+from gpxpy.gpx import GPXTrackPoint, GPX
 
 @dataclass
 class GPSData:
@@ -109,3 +110,44 @@ def gpx_points_from_gpx(gpx_file: Path, filter_src: str|None = None) -> list[GPX
 
 
     return [point for track in tracks for segment in track.segments for point in segment.points]
+
+def gpx_to_direction(gpx: GPX, dt: datetime) -> int | None:
+    '''Get the first GPX point at the given datetime and return its direction, derived by the current point and the following one.
+    Direction is in the form of degrees (0-259), as follows: 0 (North), 90 (East), 180 (South), 270 (West)'''
+
+    point: GPXTrackPoint|None = None
+    next_point: GPXTrackPoint|None = None
+
+    get_next_point = False
+
+    try:
+        for track in gpx.tracks:
+            for segment in track.segments:
+                for p in segment.points:
+                    if get_next_point:
+                        next_point = p
+                        raise StopIteration()
+
+                    if p.time == dt:
+                        point = p
+                        get_next_point = True
+    except StopIteration:
+        pass
+
+    if point is None or next_point is None:
+        return None
+    
+    # Calculate the direction between the two points, in degrees
+    lat1_rad = math.radians(point.latitude)
+    lon1_rad = math.radians(point.longitude)
+    lat2_rad = math.radians(next_point.latitude)
+    lon2_rad = math.radians(next_point.longitude)
+
+    dlon_rad = lon2_rad - lon1_rad
+
+    y = math.sin(dlon_rad) * math.cos(lat2_rad)
+    x = math.cos(lat1_rad) * math.sin(lat2_rad) - math.sin(lat1_rad) * math.cos(lat2_rad) * math.cos(dlon_rad)
+
+    bearing_rad = math.atan2(y, x)
+
+    return int(math.degrees(bearing_rad)) % 360

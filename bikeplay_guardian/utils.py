@@ -16,3 +16,6 @@ def textbox_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeF
     text_bbox = draw.textbbox((0, 0), text, font=font)
 
     return text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
+
+class StopIteration(Exception):
+    pass

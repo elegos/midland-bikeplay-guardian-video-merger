@@ -1,10 +1,11 @@
 # Test data
-**/*.jpg
-**/*.ts
-**/*.mp4
+**/*.avi
 **/*.gpx
+**/*.jpg
 **/*.json
+**/*.mp4
 **/*.png
+**/*.ts
 !/docs/*.png
 
 # Python cache
