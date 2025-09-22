@@ -9,7 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "convert.py",
-            "args": ["--gps-overlay=tachometer", "2025.09.20"],
+            "args": ["--gps-overlay=tachometer", "--recalculate-speed", "2025.09.20"],
             "console": "integratedTerminal"
         }
     ]
