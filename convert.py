@@ -24,8 +24,8 @@ args.add_argument('input_folder', type=Path, help='Path to the input folder cont
 args.add_argument('--debug', action='store_true', help='Enable debug logging')
 args.add_argument('--recalculate-speed', action='store_true', help='Recalculate speed from GPS data')
 args.add_argument('--recalculate-speed-unit', type=str, choices=['kmph', 'mph'], default='kmph', help='Speed unit for speed recalculation - ignored without --recalculate-speed')
-args.add_argument('--map-window-width', type=int, default=480, help='Width of the Open Street Map GPS track window')
-args.add_argument('--map-window-height', type=int, default=640, help='Height of the Open Street Map GPS track window')
+args.add_argument('--map-window-width', type=int, default=384, help='Width of the Open Street Map GPS track window')
+args.add_argument('--map-window-height', type=int, default=512, help='Height of the Open Street Map GPS track window')
 args.add_argument('--gps-overlay', type=str, choices=['tachometer'], default=None)
 args.add_argument('--timezone', type=str, default='Europe/Rome')
 
