@@ -72,7 +72,7 @@ def make_bottom_right_overlay(gpx_data: GPX, gpx_src_filter: str, overlay_fn: GP
 def make_pip(
     primary_video: Path, top_right_video: Path, bottom_left_video: Path,
     output: Path, main_size: tuple[int, int] = (1920, 1080),
-    bottom_left_size: tuple[int, int] = (480, 640), bottom_left_margin_px: int = 55, bottom_left_scale: float = 0.8,
+    bottom_left_size: tuple[int, int] = (384, 512), bottom_left_margin_px: int = 55, bottom_left_scale: float = 1,
     bottom_right_video: Path|None = None,
     bottom_right_size: tuple[int, int]|None = None, bottom_right_scale: float = 0.8,
 ) -> None:
@@ -80,17 +80,17 @@ def make_pip(
 
     main_denoise_filter = 'hqdn3d=4:3:6:4'
     if has_filter('bilateral_cuda'):
-        main_denoise_filter = f'hwupload_cuda,bilateral_cuda=sigmaS=3:sigmaR=0.5'
+        main_denoise_filter = f'bilateral_cuda=sigmaS=3:sigmaR=0.5'
 
     top_right_scale_filter: str = next((tpl[1] for tpl in [
-        ('scale_npp', 'hwupload_cuda,scale_npp=iw/4:ih/4'),
-        ('scale_cuda', 'hwupload_cuda,scale_cuda=iw/4:ih/4'),
+        ('scale_npp', 'scale_npp=iw/4:ih/4'),
+        ('scale_cuda', 'scale_cuda=iw/4:ih/4'),
         ('scale', 'scale=iw/4:ih/4')
     ] if has_filter(tpl[0])))
 
     bottom_left_scale_filter: str = next((tpl[1] for tpl in [
-        ('scale_npp', f'hwupload_cuda,scale_npp=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
-        ('scale_cuda', f'hwupload_cuda,scale_cuda=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale_npp', f'scale_npp=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale_cuda', f'scale_cuda=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
         ('scale', f'scale=iw*{bottom_left_scale}:ih*{bottom_left_scale}')
     ] if has_filter(tpl[0])))
 
@@ -105,9 +105,9 @@ def make_pip(
     ] if has_filter(tpl[0])))
 
     bottom_right_scale_filter: str = next((tpl[1] for tpl in [
-        ('scale_npp', f'hwupload_cuda,scale_npp=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
-        ('scale_cuda', f'hwupload_cuda,scale_cuda=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
-        ('scale', f'scale=iw*{bottom_left_scale}:ih*{bottom_left_scale}')
+        ('scale_npp', f'scale_npp=iw*{bottom_right_scale}:ih*{bottom_right_scale}'),
+        ('scale_cuda', f'scale_cuda=iw*{bottom_right_scale}:ih*{bottom_right_scale}'),
+        ('scale', f'scale=iw*{bottom_right_scale}:ih*{bottom_right_scale}')
     ] if has_filter(tpl[0])))
 
     bottom_right_overlay_filter: str|None = None
@@ -120,23 +120,37 @@ def make_pip(
     video_codec  = 'hevc_nvenc -preset fast -cq 23' if has_encoder('hevc_nvenc') else 'libx265 -preset medium -crf 23'
 
     logging.debug(f'{__name__} Merging {primary_video}, {top_right_video}, {bottom_left_video}, {bottom_right_video} into {output}')
-    v3_to_bottom_right = f'[3:v]format=rgba,fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_right]; ' if bottom_right_video is not None else ''
-    if v3_to_bottom_right:
-        v3_to_bottom_right += f'[bottom_right]{bottom_right_scale_filter}[bottom_right]; '
-    outv_with_bottom_right = f'[outv][bottom_right]{bottom_right_overlay_filter}[outv]' if bottom_right_overlay_filter is not None else ''
+
+    # -------- Filter complex build --------
+    with_hwupload = 'hwupload_cuda' if has_filter('hwupload_cuda') else 'null'
+    filter_complex = [
+        f'[0:v]{with_hwupload}[main]',
+        f'[1:v]{with_hwupload}[top_right]',
+        f'[2:v]{with_hwupload}[bottom_left]'
+    ]
+    if bottom_right_video is not None:
+        filter_complex.append(f'[3:v]format=rgba,{with_hwupload}[bottom_right]')
+    filter_complex.append(f'[main]{main_denoise_filter}[main]')
+    filter_complex.append(f'[top_right]{top_right_scale_filter},tpad=stop_mode=clone:stop_duration=60[top_right]')
+    filter_complex.append('[bottom_left]fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_left]')
+    if bottom_left_scale != 1:
+        filter_complex.append(f'[bottom_left]{bottom_left_scale_filter}[bottom_left]')
+    if bottom_right_video is not None:
+        filter_complex.append('[bottom_right]fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_right]')
+        if bottom_right_scale != 1:
+            filter_complex.append(f'[bottom_right]{bottom_right_scale_filter}[bottom_right]')
+    # Composition
+    filter_complex.append(f'[main][top_right]{top_right_overlay_filter}[outv]')
+    filter_complex.append(f'[outv][bottom_left]{bottom_left_overlay_filter}[outv]')
+    if bottom_right_video is not None:
+        filter_complex.append(f'[outv][bottom_right]{bottom_right_overlay_filter}[outv]')
+
+    filter_complex = '; '.join(filter_complex)
 
     command = [
         'ffmpeg', '-hide_banner', '-loglevel', 'error',
         '-i', str(primary_video), '-i', str(top_right_video), '-i', str(bottom_left_video), *(['-i', str(bottom_right_video)] if bottom_right_video is not None else []),
-        '-filter_complex',
-        f'[0:v]{main_denoise_filter}[main]; '
-        f'[1:v]{top_right_scale_filter},tpad=stop_mode=clone:stop_duration=60[top_right]; ' # video is 1 FPS, normalize to 30 FPS
-        f'[2:v]fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_left]; '
-        f'{v3_to_bottom_right}' # video is 1 FPS, normalize to 30 FPS
-        f'[bottom_left]{bottom_left_scale_filter}[bottom_left]; '
-        f'[main][top_right]{top_right_overlay_filter}[outv]; '
-        f'[outv][bottom_left]{bottom_left_overlay_filter}[outv]; '
-        f'{outv_with_bottom_right}',
+        '-filter_complex', filter_complex,
         '-map', '[outv]', '-map', '0:a',
         '-c:v', *video_codec.split(),
         '-c:a', 'aac',
