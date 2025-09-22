@@ -6,12 +6,14 @@ import shutil
 import sys
 from typing import Any
 
+import gpxpy
+from gpxpy.gpx import GPX
 from PIL import Image
 
 from bikeplay_guardian.core import make_bottom_right_overlay, make_pip, merge_videos, split_files
 from bikeplay_guardian.cv2_tools import frames_to_video
 from bikeplay_guardian.ffmpeg import has_encoder, has_filter
-from bikeplay_guardian.gps import GPSData, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_points_from_gpx
+from bikeplay_guardian.gps import GPSData, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_to_gpsdata, gpx_points_from_gpx
 from bikeplay_guardian.gps_info_overlay import GPSInfoOverlayFunction, draw_tachometer_flatbase
 from bikeplay_guardian.openstreetmaps import DEFAULT_ZOOM_LEVEL, TILE_SIZE, gpx_to_osm_map
 from bikeplay_guardian.utils import progress_bar
@@ -47,14 +49,15 @@ def extract_gps_data(front_file: Path) -> list[GPSData|None]|None:
     rear_file = input_path / 'ts_rear' / front_file.name.replace('_F.ts', '_R.ts')
 
     if not rear_file.exists():
-        logging.warning(f'Rear video segment not found for {front_file.name}, skipping PIP creation.')
+        logging.warning(f'Rear video segment not found for {front_file.name}, skipping GPS data creation.')
         return None
     
     return get_gps_data_from_viidure(front_file)
 
-def process_pip(front_file: Path):
+def process_pip(front_file: Path, overlay_size: tuple[int, int]) -> None:
     rear_file = input_path / 'ts_rear' / front_file.name.replace('_F.ts', '_R.ts')
     oms_file = input_path / 'oms_videos' / (front_file.name.split('.')[0] + '.mp4')
+    overlay_file = input_path / 'overlay_videos' / (front_file.name.split('.')[0] + '.mov')
     out_file = input_path / 'mp4_pip' / (front_file.stem.replace('_F', '') + '.mp4')
 
     if not rear_file.exists():
@@ -62,7 +65,14 @@ def process_pip(front_file: Path):
         return
     
     if not out_file.exists():
-        make_pip(front_file, rear_file, oms_file, input_path / 'mp4_pip' / (front_file.stem.replace('_F', '') + '.mp4'))
+        make_pip(
+            primary_video=front_file,
+            top_right_video=rear_file,
+            bottom_left_video=oms_file,
+            bottom_right_video=overlay_file,
+            bottom_right_size=overlay_size,
+            output=input_path / 'mp4_pip' / (front_file.stem.replace('_F', '') + '.mp4')
+        )
 
 def process_oms_video(
     osm_map: Image.Image, osm_meta: dict[str, Any], window_width_px: int, window_height_px: int, gpx_file: Path, gpx_src_filter: str, out_file: Path
@@ -86,7 +96,7 @@ def process_oms_video(
     frames_to_video(frames, out_file, window_width_px, window_height_px, fps=30)
 
 def process_overlay_video(
-    gpx_file: Path,
+    gpx_data: GPX,
     gpx_src_filter: str,
     overlay_fn: GPSInfoOverlayFunction,
     timezone: str,
@@ -98,9 +108,9 @@ def process_overlay_video(
     if out_file.exists():
         return
 
-    frames = make_bottom_right_overlay(gpx_file, gpx_src_filter, overlay_fn, timezone, width_px, height_px)
+    frames = make_bottom_right_overlay(gpx_data, gpx_src_filter, overlay_fn, timezone, width_px, height_px)
 
-    frames_to_video(frames, out_file, width_px, height_px, na_func=lambda x, y: overlay_fn(0, '', 0, 0, '0°', '', None, timezone), fps=30)
+    frames_to_video(frames, out_file, width_px, height_px, na_func=lambda x, y: overlay_fn(0, '', 0, 0, '0°', '', None, timezone), fps=30, preserve_alpha_channel=True)
 
 if __name__ == '__main__':
     args = args.parse_args()
@@ -115,17 +125,21 @@ if __name__ == '__main__':
     pip_folder.mkdir(exist_ok=True)
     openstreetmaps_map = input_path / 'osm_map.png'
     openstreetmaps_map_meta = input_path / 'osm_map.meta.json'
+    gpx_track_file = input_path / 'track.gpx'
 
     split_files(input_path)
     num_files = len(list((input_path / 'ts_front').glob('*.ts')))
     logging.info(f'Found {num_files} video segments in {input_path}')
 
     gps_data: list[GPSData|None] = []
-    for idx, front_file in enumerate(sorted((input_path / 'ts_front').glob('*.ts'))):
-        progress_bar(idx + 1, num_files)
-        gps_data.extend(extract_gps_data(front_file) or [])
-    
-    gpsdata_to_gpx(gps_data, input_path / 'track.gpx')
+    if not gpx_track_file.exists():
+        for idx, front_file in enumerate(sorted((input_path / 'ts_front').glob('*.ts'))):
+            progress_bar(idx + 1, num_files)
+            gps_data.extend(extract_gps_data(front_file) or [])
+        
+        gpsdata_to_gpx(gps_data, gpx_track_file)
+    else:
+        gps_data = gpx_to_gpsdata(gpx_track_file)
 
     osm_map_image: Image.Image|None = None
     osm_map_meta: dict[str, int] = {}
@@ -152,18 +166,22 @@ if __name__ == '__main__':
             input_path / 'oms_videos' / (pip_file.name.split('.')[0] + '.mp4')
         )
     
+    overlay_size = (0, 0)
     if args.gps_overlay == 'tachometer':
+        overlay_size = draw_tachometer_flatbase.width, draw_tachometer_flatbase.height
         logging.info('Processing Tachometer overlay videos...')
+        gpx_data = gpxpy.parse((input_path / 'track.gpx').open('r'))
+
         for idx, pip_file in enumerate((input_path / 'ts_front').glob('*.ts')):
             progress_bar(idx + 1, num_files)
             process_overlay_video(
-                gpx_file=input_path / 'track.gpx',
+                gpx_data=gpx_data,
                 gpx_src_filter=pip_file.name,
                 overlay_fn=draw_tachometer_flatbase,
                 timezone=args.timezone,
                 width_px=800,
                 height_px=400,
-                out_file=input_path / 'tachometer_videos' / (pip_file.name.split('.')[0] + '.avi')
+                out_file=input_path / 'overlay_videos' / (pip_file.name.split('.')[0] + '.mov')
             )
     
     logging.info('Merging segment videos [PIP]...')
@@ -172,8 +190,8 @@ if __name__ == '__main__':
         progress_bar(idx + 1, gps_data_len)
 
         front_file = input_path / 'ts_front' / source_file
-        process_pip(front_file)
+        process_pip(front_file, overlay_size)
 
     # Merge everything
     full_video_path = input_path / 'full_video.mp4'
-    merge_videos((input_path / 'mp4_pip').glob('*.mp4'), full_video_path)
+    merge_videos(pip_folder.glob('*.mp4'), full_video_path)

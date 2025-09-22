@@ -3,6 +3,7 @@ from datetime import datetime
 import math
 from pathlib import Path
 import subprocess
+from typing import Any
 import xml.etree.cElementTree as ET
 
 import gpxpy
@@ -44,6 +45,29 @@ class GPSData:
             return GPSData(source_file, timestamp, latitude, longitude, speed, speed_unit, hdop, geoidheight, satellites, accelerometer)
         except Exception:
             return None
+    
+    @staticmethod
+    def from_gpx_point(trkpt: GPXTrackPoint, source: str) -> 'GPSData|None':
+        speed: str = next((ext.text for ext in trkpt.extensions if ext.tag == 'speed'), '0 km/h')
+
+        default_acc_attr: dict[str, Any] = {}
+        acc_attr: dict[str, Any] = next((ext.attrib for ext in trkpt.extensions if ext.tag == 'accelerometer'), default_acc_attr)
+        acc_x = float(acc_attr.get('x') or 0)
+        acc_y = float(acc_attr.get('y') or 0)
+        acc_z = float(acc_attr.get('z') or 0)
+
+        return GPSData(
+            source_file=source,
+            timestamp=trkpt.time or datetime.now(),
+            latitude=trkpt.latitude,
+            longitude=trkpt.longitude,
+            speed=float(speed.split(' ')[0]),
+            speed_unit=speed.split(' ')[1],
+            hdop=trkpt.horizontal_dilution or 0,
+            geoidheight=trkpt.geoid_height or 0,
+            satellites=int(trkpt.satellites or 0),
+            accelerometer=(acc_x, acc_y, acc_z),
+        )
 
 
 def get_gps_data_from_viidure(ts_file: Path) -> list[GPSData|None]:
@@ -99,6 +123,18 @@ def gpsdata_to_gpx(gps_data: list[GPSData|None], output: Path) -> None:
     tree = ET.ElementTree(root)
     ET.indent(tree, '    ')
     tree.write(output, encoding='utf-8', xml_declaration=True)
+
+def gpx_to_gpsdata(gpx_file: Path) -> list[GPSData|None]:
+    gpx = gpxpy.parse(gpx_file.open('r'))
+    result: list[GPSData|None] = []
+
+    for track in gpx.tracks:
+        src = track.source or ''
+        for segment in track.segments:
+            for point in segment.points:
+                result.append(GPSData.from_gpx_point(point, src))
+
+    return result
 
 def gpx_points_from_gpx(gpx_file: Path, filter_src: str|None = None) -> list[GPXTrackPoint]:
     gpx = gpxpy.parse(gpx_file.open('r'))

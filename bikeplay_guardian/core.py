@@ -2,11 +2,10 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import subprocess
-from time import sleep
 from typing import Iterator
 
 from PIL import Image
-import gpxpy
+from gpxpy.gpx import GPX
 
 from bikeplay_guardian.ffmpeg import has_encoder, has_filter
 from bikeplay_guardian.gps import gpx_to_direction
@@ -35,10 +34,8 @@ def split_files(folder: Path):
     for file_path in folder.glob('*.jpg'):
         file_path.rename(jpg / file_path.name)
 
-def make_bottom_right_overlay(gpx: Path, gpx_src_filter: str, overlay_fn: GPSInfoOverlayFunction, timezone: str, width_px: int, height_px: int) -> list[tuple[datetime, Image.Image]]:
+def make_bottom_right_overlay(gpx_data: GPX, gpx_src_filter: str, overlay_fn: GPSInfoOverlayFunction, timezone: str, width_px: int, height_px: int) -> list[tuple[datetime, Image.Image]]:
     result: list[tuple[datetime, Image.Image]] = []
-
-    gpx_data = gpxpy.parse(gpx.open('r'))
 
     last_village_name: str|None = None
     pt_idx = 0
@@ -57,8 +54,6 @@ def make_bottom_right_overlay(gpx: Path, gpx_src_filter: str, overlay_fn: GPSInf
 
                     # Calculate the village name only once every 10 seconds
                     village_name = last_village_name if pt_idx % 10 != 0 and last_village_name and last_village_name != 'N/A' else latlon_to_village_name(trkpt.latitude, trkpt.longitude)
-                    if pt_idx % 10 == 0:
-                        sleep(0.1) # OpenStreetMap API thresholds
                     last_village_name = village_name
 
                     result.append((trkpt.time, overlay_fn(
@@ -70,54 +65,78 @@ def make_bottom_right_overlay(gpx: Path, gpx_src_filter: str, overlay_fn: GPSInf
                         village_name,
                         trkpt.time,
                         timezone,
-                        width_px,
-                        height_px
                     )))
 
     return result
 
-def make_pip(main: Path, secondary: Path, oms_vid: Path, output: Path, main_size: tuple[int, int] = (1920, 1080), oms_vid_size: tuple[int, int] = (480, 640), oms_vid_margin_px: int = 55, oms_vid_scale: float = 0.8) -> None:
+def make_pip(
+    primary_video: Path, top_right_video: Path, bottom_left_video: Path,
+    output: Path, main_size: tuple[int, int] = (1920, 1080),
+    bottom_left_size: tuple[int, int] = (480, 640), bottom_left_margin_px: int = 55, bottom_left_scale: float = 0.8,
+    bottom_right_video: Path|None = None,
+    bottom_right_size: tuple[int, int]|None = None, bottom_right_scale: float = 0.8,
+) -> None:
     ''' Make a picture-in-picture video from two input videos.'''
 
     main_denoise_filter = 'hqdn3d=4:3:6:4'
     if has_filter('bilateral_cuda'):
         main_denoise_filter = f'hwupload_cuda,bilateral_cuda=sigmaS=3:sigmaR=0.5'
 
-    secondary_scale_filter: str = next((tpl[1] for tpl in [
+    top_right_scale_filter: str = next((tpl[1] for tpl in [
         ('scale_npp', 'hwupload_cuda,scale_npp=iw/4:ih/4'),
         ('scale_cuda', 'hwupload_cuda,scale_cuda=iw/4:ih/4'),
         ('scale', 'scale=iw/4:ih/4')
     ] if has_filter(tpl[0])))
 
-    oms_scale_filter: str = next((tpl[1] for tpl in [
-        ('scale_npp', f'hwupload_cuda,scale_npp=iw*{oms_vid_scale}:ih*{oms_vid_scale}'),
-        ('scale_cuda', f'hwupload_cuda,scale_cuda=iw*{oms_vid_scale}:ih*{oms_vid_scale}'),
-        ('scale', f'scale=iw*{oms_vid_scale}:ih*{oms_vid_scale}')
+    bottom_left_scale_filter: str = next((tpl[1] for tpl in [
+        ('scale_npp', f'hwupload_cuda,scale_npp=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale_cuda', f'hwupload_cuda,scale_cuda=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale', f'scale=iw*{bottom_left_scale}:ih*{bottom_left_scale}')
     ] if has_filter(tpl[0])))
 
-    overlay_filter = next(tpl[1] for tpl in [
+    top_right_overlay_filter = next(tpl[1] for tpl in [
         ('overlay_cuda', 'overlay_cuda=W-w:0:shortest=1'),
         ('overlay', 'overlay=W-w:0:shortest=1')
     ] if has_filter(tpl[0]))
 
-    oms_overlay_filter: str = next((tpl[1] for tpl in [
-        ('overlay_cuda', f'overlay_cuda=x=0:y={main_size[1] - oms_vid_size[1] * oms_vid_scale - oms_vid_margin_px}:shortest=1'),
-        ('overlay', f'overlay=x=0:y={main_size[1] - oms_vid_size[1] * oms_vid_scale - oms_vid_margin_px}:shortest=1')
+    bottom_left_overlay_filter: str = next((tpl[1] for tpl in [
+        ('overlay_cuda', f'overlay_cuda=x=0:y={main_size[1] - bottom_left_size[1] * bottom_left_scale - bottom_left_margin_px}:shortest=1'),
+        ('overlay', f'overlay=x=0:y={main_size[1] - bottom_left_size[1] * bottom_left_scale - bottom_left_margin_px}:shortest=1')
     ] if has_filter(tpl[0])))
+
+    bottom_right_scale_filter: str = next((tpl[1] for tpl in [
+        ('scale_npp', f'hwupload_cuda,scale_npp=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale_cuda', f'hwupload_cuda,scale_cuda=iw*{bottom_left_scale}:ih*{bottom_left_scale}'),
+        ('scale', f'scale=iw*{bottom_left_scale}:ih*{bottom_left_scale}')
+    ] if has_filter(tpl[0])))
+
+    bottom_right_overlay_filter: str|None = None
+    if bottom_right_size is not None:
+        bottom_right_overlay_filter = next((tpl[1] for tpl in [
+            ('overlay_cuda', f'overlay_cuda=x={main_size[0] - bottom_right_size[0] * bottom_right_scale}:y={main_size[1] - bottom_right_size[1] * bottom_right_scale}:shortest=1'),
+            ('overlay', f'overlay=x={main_size[0] - bottom_right_size[0] * bottom_right_scale}:y={main_size[1] - bottom_right_size[1] * bottom_right_scale}:shortest=1')
+        ] if has_filter(tpl[0])))
 
     video_codec  = 'hevc_nvenc -preset fast -cq 23' if has_encoder('hevc_nvenc') else 'libx265 -preset medium -crf 23'
 
-    logging.debug(f'{__name__} Merging {main} and {secondary} into {output}')
+    logging.debug(f'{__name__} Merging {primary_video}, {top_right_video}, {bottom_left_video}, {bottom_right_video} into {output}')
+    v3_to_bottom_right = f'[3:v]format=rgba,fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_right]; ' if bottom_right_video is not None else ''
+    if v3_to_bottom_right:
+        v3_to_bottom_right += f'[bottom_right]{bottom_right_scale_filter}[bottom_right]; '
+    outv_with_bottom_right = f'[outv][bottom_right]{bottom_right_overlay_filter}[outv]' if bottom_right_overlay_filter is not None else ''
+
     command = [
         'ffmpeg', '-hide_banner', '-loglevel', 'error',
-        '-i', str(main), '-i', str(secondary), '-i', str(oms_vid),
+        '-i', str(primary_video), '-i', str(top_right_video), '-i', str(bottom_left_video), *(['-i', str(bottom_right_video)] if bottom_right_video is not None else []),
         '-filter_complex',
-        f'[0:v]{main_denoise_filter}[front]; '
-        f'[1:v]{secondary_scale_filter},tpad=stop_mode=clone:stop_duration=60[rear]; '
-        f'[2:v]fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[oms_vid]; ' #  oms_vid is 1 FPS, this normalizes it to 30 FPS
-        f'[oms_vid]{oms_scale_filter}[oms_vid_scaled]; '
-        f'[front][rear]{overlay_filter}[front_rear]; '
-        f'[front_rear][oms_vid_scaled]{oms_overlay_filter}[outv]',
+        f'[0:v]{main_denoise_filter}[main]; '
+        f'[1:v]{top_right_scale_filter},tpad=stop_mode=clone:stop_duration=60[top_right]; ' # video is 1 FPS, normalize to 30 FPS
+        f'[2:v]fps=30,setpts=PTS*30,tpad=stop_mode=clone:stop_duration=60[bottom_left]; '
+        f'{v3_to_bottom_right}' # video is 1 FPS, normalize to 30 FPS
+        f'[bottom_left]{bottom_left_scale_filter}[bottom_left]; '
+        f'[main][top_right]{top_right_overlay_filter}[outv]; '
+        f'[outv][bottom_left]{bottom_left_overlay_filter}[outv]; '
+        f'{outv_with_bottom_right}',
         '-map', '[outv]', '-map', '0:a',
         '-c:v', *video_codec.split(),
         '-c:a', 'aac',

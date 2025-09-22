@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from threading import Semaphore
 from typing import Any
 
 import logging
@@ -18,6 +19,8 @@ from bikeplay_guardian.utils import progress_bar
 TILE_SIZE = 256  # OSM tile size in pixels
 DEFAULT_ZOOM_LEVEL = 15 # OSM zoom level
 USER_AGENT = 'Bikeplay Guardian GPX Tool 1.0'
+
+requests_semaphore = Semaphore()
 
 def make_na_map_placeholder(window_width_px: int, window_height_px: int) -> Image.Image:
     text = 'N/A'
@@ -198,6 +201,7 @@ def gpx_to_frames(gpx_points: list[GPXTrackPoint], img: Image.Image, osm_origin:
 
     return frames
 
+
 def latlon_to_village_name(lat: float, lon: float) -> str:
     '''Use the Nominatim service to get the village's / city's name'''
 
@@ -215,9 +219,12 @@ def latlon_to_village_name(lat: float, lon: float) -> str:
     }
 
     headers = {"User-Agent": USER_AGENT}
-    resp = requests.get(url, params=params, headers=headers)
-    data = resp.json()
 
+    with requests_semaphore:
+        resp = requests.get(url, params=params, headers=headers)
+        time.sleep(0.2)
+
+    data = resp.json()
     addr = data.get('address', {})
 
     return (

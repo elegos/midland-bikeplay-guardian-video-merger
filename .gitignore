@@ -1,8 +1,9 @@
-# Test data
+# Test / output data
 **/*.avi
 **/*.gpx
 **/*.jpg
 **/*.json
+**/*.mov
 **/*.mp4
 **/*.png
 **/*.ts

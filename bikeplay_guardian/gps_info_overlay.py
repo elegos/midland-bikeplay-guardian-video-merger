@@ -1,7 +1,8 @@
 from datetime import datetime
+from functools import wraps
 import math
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Callable, Protocol, cast
 from PIL import Image, ImageDraw, ImageFont
 import pytz
 
@@ -18,11 +19,26 @@ class GPSInfoOverlayFunction(Protocol):
         location: str,
         dt: datetime|None,
         timezone: str = "Europe/Rome",
-        width: int = 800,
-        height: int = 400
     ) -> Image.Image:
         ...
+    
+    width: int
+    height: int
 
+def gps_info_overlay(width: int, height: int) -> Callable[..., GPSInfoOverlayFunction]:
+    def decorator(func: Callable[..., object]) -> GPSInfoOverlayFunction:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: dict[Any, Any]):
+            return func(*args, **kwargs)
+
+        setattr(wrapper, "width", width)
+        setattr(wrapper, "height", height)
+
+        return cast(GPSInfoOverlayFunction, wrapper)
+
+    return decorator
+
+@gps_info_overlay(800, 400)
 def draw_tachometer_flatbase(
     speed: float,
     speed_unit: str,
@@ -32,9 +48,11 @@ def draw_tachometer_flatbase(
     location: str,
     dt: datetime|None,
     timezone: str = "Europe/Rome",
-    width: int = 800,
-    height: int = 400
 ):
+    # ---------- Variables from the decorator ----------
+    width = draw_tachometer_flatbase.width
+    height = draw_tachometer_flatbase.height
+
     # ---------- Canvas ----------
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -137,3 +155,6 @@ def draw_tachometer_flatbase(
         )
 
     return img
+
+draw_tachometer_flatbase.width = 800
+draw_tachometer_flatbase.height = 400
