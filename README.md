@@ -32,7 +32,11 @@ The project also uses OpenStreetMap to download the maps for the GPS track video
 
 ## Example output
 
+### Output frame example
 ![Example frame](./docs/example_frame.png)
+
+### Output frame example with --gps-overlay=tachometer
+![Example frame](./docs/example_frame_with_tachmoeter_overlay.png)
 
 ## How to use
 
@@ -40,11 +44,31 @@ The project also uses OpenStreetMap to download the maps for the GPS track video
 # First time only
 pipenv install
 
-pipenv run python ./convert.py folder-where-all-files-are-stored
+pipenv run python ./convert.py [--gps-overlay=tachometer] folder-where-all-files-are-stored
 ```
 
 It will:
 - create different folders for front videos, rear videos, jpeg still frames
 - extract the gpx information out of all front (*_F.ts) files and save it
 - generate the OpenStreetMap video based on the gpx information
+- (optionally) generate a tachometer-style overlay at the bottom right with GPS info, including speed, GPS coordinates, direction degrees, the city / town / village / hamlet / municipality and the datetime, at the given time zone, 
 - merge all the front videos, embedding (via Picture in Picture) both the rear videos and the OSM video previously made
+
+### Available options
+```bash
+pipenv run python ./convert.py --help                             
+usage: convert.py [-h] [--debug] [--window-width WINDOW_WIDTH] [--window-height WINDOW_HEIGHT] [--gps-overlay {tachometer}] [--timezone TIMEZONE] input_folder
+
+positional arguments:
+  input_folder          Path to the input folder containing .jpg and .ts files
+
+options:
+  -h, --help            show this help message and exit
+  --debug               Enable debug logging
+  --window-width WINDOW_WIDTH
+                        Width of the Open Street Map GPS track window
+  --window-height WINDOW_HEIGHT
+                        Height of the Open Street Map GPS track window
+  --gps-overlay {tachometer}
+  --timezone TIMEZONE
+```
