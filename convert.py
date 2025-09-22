@@ -13,7 +13,7 @@ from PIL import Image
 from bikeplay_guardian.core import make_bottom_right_overlay, make_pip, merge_videos, split_files
 from bikeplay_guardian.cv2_tools import frames_to_video
 from bikeplay_guardian.ffmpeg import has_encoder, has_filter
-from bikeplay_guardian.gps import GPSData, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_to_gpsdata, gpx_points_from_gpx
+from bikeplay_guardian.gps import GPSData, calculate_speed, get_gps_data_from_viidure, gpsdata_to_gpx, gpx_to_gpsdata, gpx_points_from_gpx
 from bikeplay_guardian.gps_info_overlay import GPSInfoOverlayFunction, draw_tachometer_flatbase
 from bikeplay_guardian.openstreetmaps import DEFAULT_ZOOM_LEVEL, TILE_SIZE, gpx_to_osm_map
 from bikeplay_guardian.utils import progress_bar
@@ -22,8 +22,10 @@ from bikeplay_guardian import openstreetmaps
 args = ArgumentParser()
 args.add_argument('input_folder', type=Path, help='Path to the input folder containing .jpg and .ts files')
 args.add_argument('--debug', action='store_true', help='Enable debug logging')
-args.add_argument('--window-width', type=int, default=480, help='Width of the Open Street Map GPS track window')
-args.add_argument('--window-height', type=int, default=640, help='Height of the Open Street Map GPS track window')
+args.add_argument('--recalculate-speed', action='store_true', help='Recalculate speed from GPS data')
+args.add_argument('--recalculate-speed-unit', type=str, choices=['kmph', 'mph'], default='kmph', help='Speed unit for speed recalculation - ignored without --recalculate-speed')
+args.add_argument('--map-window-width', type=int, default=480, help='Width of the Open Street Map GPS track window')
+args.add_argument('--map-window-height', type=int, default=640, help='Height of the Open Street Map GPS track window')
 args.add_argument('--gps-overlay', type=str, choices=['tachometer'], default=None)
 args.add_argument('--timezone', type=str, default='Europe/Rome')
 
@@ -137,15 +139,21 @@ if __name__ == '__main__':
             progress_bar(idx + 1, num_files)
             gps_data.extend(extract_gps_data(front_file) or [])
         
+        if args.recalculate_speed:
+            gps_data = calculate_speed(gps_data, args.recalculate_speed_unit)
+        
         gpsdata_to_gpx(gps_data, gpx_track_file)
     else:
         gps_data = gpx_to_gpsdata(gpx_track_file)
+
+        if args.recalculate_speed:
+            gps_data = calculate_speed(gps_data, args.recalculate_speed_unit)
 
     osm_map_image: Image.Image|None = None
     osm_map_meta: dict[str, int] = {}
 
     if not openstreetmaps_map.exists() or not openstreetmaps_map_meta.exists():
-        osm_map_image, (osm_origin_x, osm_origin_y) = gpx_to_osm_map(input_path / 'track.gpx', DEFAULT_ZOOM_LEVEL, args.window_width, args.window_height)
+        osm_map_image, (osm_origin_x, osm_origin_y) = gpx_to_osm_map(input_path / 'track.gpx', DEFAULT_ZOOM_LEVEL, args.map_window_width, args.map_window_height)
         osm_map_image.save(openstreetmaps_map)
         osm_map_meta = {'origin_x': osm_origin_x, 'origin_y': osm_origin_y, 'zoom': DEFAULT_ZOOM_LEVEL, 'tile_size': TILE_SIZE}
         json.dump(osm_map_meta, openstreetmaps_map_meta.open('w'), indent=4)
@@ -160,8 +168,8 @@ if __name__ == '__main__':
         process_oms_video(
             osm_map_image,
             osm_map_meta,
-            args.window_width,
-            args.window_height,
+            args.map_window_width,
+            args.map_window_height,
             input_path / 'track.gpx', pip_file.name,
             input_path / 'oms_videos' / (pip_file.name.split('.')[0] + '.mp4')
         )

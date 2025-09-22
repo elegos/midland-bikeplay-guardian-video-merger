@@ -65,9 +65,12 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --debug               Enable debug logging
-  --window-width WINDOW_WIDTH
+  --recalculate-speed   Recalculate speed from GPS data
+  --recalculate-speed-unit {kmph,mph}
+                        Speed unit for speed recalculation - ignored without --recalculate-speed
+  --map-window-width MAP_WINDOW_WIDTH
                         Width of the Open Street Map GPS track window
-  --window-height WINDOW_HEIGHT
+  --map-window-height MAP_WINDOW_HEIGHT
                         Height of the Open Street Map GPS track window
   --gps-overlay {tachometer}
   --timezone TIMEZONE

@@ -1,9 +1,10 @@
+from copy import copy
 from dataclasses import dataclass
 from datetime import datetime
 import math
 from pathlib import Path
 import subprocess
-from typing import Any
+from typing import Any, Literal
 import xml.etree.cElementTree as ET
 
 import gpxpy
@@ -80,6 +81,46 @@ def get_gps_data_from_viidure(ts_file: Path) -> list[GPSData|None]:
     gps_bytes = subprocess.run(command, capture_output=True).stdout
 
     return [GPSData.from_viidure_string(ts_file.name, entry) for entry in gps_bytes.decode('utf-8', errors='ignore').split('\x00') if entry.startswith('Viidure')]
+
+def calculate_speed(gps_data: list[GPSData|None], unit: Literal['kmph', 'mph'] = 'kmph') -> list[GPSData|None]:
+    '''Use the Haversine formula to calculate the speed'''
+    result: list[GPSData|None] = []
+
+    R = 6371000.0 # Earth mean radius, in meters
+
+    previous_point: GPSData|None = None
+    for point in gps_data:
+        res = copy(point)
+
+        if previous_point and point and res:
+            lat1, lon1 = previous_point.latitude, previous_point.longitude
+            lat2, lon2 = point.latitude, point.longitude
+            delta_t_seconds = (point.timestamp - previous_point.timestamp).total_seconds()
+
+            if delta_t_seconds > 0:
+                phi1, phi2 = math.radians(lat1), math.radians(lat2)
+                dphi = math.radians(lat2 - lat1)
+                dlambda = math.radians(lon2 - lon1)
+
+                # Haversine formula for distance in meters
+                a = math.sin(dphi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                distance_m = R * c
+
+                speed_m_s = distance_m
+
+                if unit.lower() == "kmph":
+                    res.speed = round(speed_m_s * 3.6 / delta_t_seconds, 1)
+                    res.speed_unit = 'km/h'
+                elif unit.lower() == "mph":
+                    res.speed = round(speed_m_s * 2.23694 / delta_t_seconds, 1)
+                    res.speed_unit = 'mph'
+        
+        result.append(res)
+
+        previous_point = point
+
+    return result
 
 def gpsdata_to_gpx(gps_data: list[GPSData|None], output: Path) -> None:
     root = ET.Element(
