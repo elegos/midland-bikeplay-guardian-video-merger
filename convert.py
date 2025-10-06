@@ -112,7 +112,8 @@ def process_overlay_video(
 
     frames = make_bottom_right_overlay(gpx_data, gpx_src_filter, overlay_fn, timezone, width_px, height_px)
 
-    frames_to_video(frames, out_file, width_px, height_px, na_func=lambda x, y: overlay_fn(0, '', 0, 0, '0°', '', None, timezone), fps=30, preserve_alpha_channel=True)
+    if frames:
+        frames_to_video(frames, out_file, width_px, height_px, na_func=lambda x, y: overlay_fn(0, '', 0, 0, '0°', '', None, timezone), fps=30, preserve_alpha_channel=True)
 
 if __name__ == '__main__':
     args = args.parse_args()

@@ -77,6 +77,12 @@ def make_pip(
     bottom_right_size: tuple[int, int]|None = None, bottom_right_scale: float = 0.8,
 ) -> None:
     ''' Make a picture-in-picture video from two input videos.'''
+    
+    # Make the overlay videos None if they don't exist
+    if bottom_right_video is None or not bottom_right_video.exists():
+        bottom_right_video = None
+        bottom_right_size = None
+    
 
     main_denoise_filter = 'hqdn3d=4:3:6:4'
     if has_filter('bilateral_cuda'):
